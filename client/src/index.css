@@ -1122,3 +1122,319 @@ textarea.form-input {
   background: rgba(130, 71, 229, 0.1);
   color: #7c3aed;
 }
+
+/* ---- Landing Page ---- */
+.landing-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  color: var(--text-primary, #1a1a2e);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.landing-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2rem;
+}
+
+.landing-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4rem;
+}
+
+.landing-logo {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--primary-dark, #1a1a2e);
+}
+
+.landing-nav-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.landing-hero {
+  text-align: left;
+  margin-bottom: 4rem;
+}
+
+.landing-hero h1 {
+  font-size: clamp(2rem, 4.5vw, 3.2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  max-width: 700px;
+}
+
+.landing-hero p {
+  margin-top: 0.9rem;
+  color: var(--text-secondary, #6b7280);
+  max-width: 680px;
+}
+
+.landing-hero-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.landing-how,
+.landing-trust {
+  margin-bottom: 3rem;
+}
+
+.landing-how h2,
+.landing-trust h2 {
+  font-size: 1.35rem;
+  margin-bottom: 1rem;
+}
+
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.landing-step,
+.landing-testimonial-card {
+  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--bg-card, #ffffff);
+  border-radius: var(--radius-md, 8px);
+  padding: 1rem;
+}
+
+.landing-step-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-on-primary, #ffffff);
+  background: var(--accent-cyan, #4f8ef7);
+  margin-bottom: 0.6rem;
+}
+
+.landing-step h3 {
+  font-size: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.landing-step p,
+.landing-testimonial-card span {
+  font-size: 0.88rem;
+  color: var(--text-secondary, #6b7280);
+}
+
+.landing-testimonials {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.landing-testimonial-card p {
+  font-size: 0.95rem;
+  margin-bottom: 0.8rem;
+}
+
+.landing-footer {
+  border-top: 1px solid var(--border-color, #e5e7eb);
+  padding-top: 1rem;
+  font-size: 0.82rem;
+  color: var(--text-muted, #6b7280);
+}
+
+/* ---- Auth Modal ---- */
+.auth-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 22, 40, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1rem;
+}
+
+.auth-modal {
+  width: 100%;
+  max-width: 460px;
+  background: #ffffff;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-xl);
+  animation: authModalIn 200ms ease-out;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.auth-modal-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light, #f1f5f9);
+}
+
+.auth-tab {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.9rem 1rem;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.auth-tab.active {
+  color: var(--primary-dark, #1a1a2e);
+  box-shadow: inset 0 -2px 0 var(--accent-cyan, #4f8ef7);
+}
+
+.auth-modal-close {
+  margin-left: auto;
+  margin-right: 0.5rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.auth-modal-body {
+  padding: 1rem 1.1rem 1.2rem;
+}
+
+.auth-error-banner {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: var(--radius-sm, 6px);
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.82rem;
+}
+
+.auth-role-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--accent-cyan, #4f8ef7);
+  text-transform: uppercase;
+}
+
+.auth-switch-text {
+  margin-top: 0.85rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.auth-switch-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent-cyan, #4f8ef7);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.form-error {
+  margin-top: 0.28rem;
+  font-size: 0.76rem;
+  color: #dc2626;
+}
+
+@keyframes authModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Driver Cards ---- */
+.driver-card-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.driver-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 0.75rem 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.driver-card:hover {
+  border-color: var(--accent-cyan);
+  transform: translateY(-1px);
+}
+
+.driver-card.selected {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.16);
+}
+
+.driver-card-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.driver-card-rating {
+  margin-top: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--accent-amber);
+  font-weight: 600;
+}
+
+.driver-card-rating-text {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.driver-card-meta {
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.driver-new-badge {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #155e75;
+  background: #cffafe;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .landing-navbar {
+    margin-bottom: 2.4rem;
+  }
+
+  .landing-steps,
+  .landing-testimonials {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-hero h1 {
+    font-size: 2rem;
+  }
+}

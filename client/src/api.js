@@ -22,8 +22,11 @@ const api = {
   // Auth
   login: (username, password) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-  register: (data) =>
-    request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  register: ({ username, password, name, role, email, phone }) =>
+    request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, name, role, email, phone }),
+    }),
   getProfile: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
 
@@ -38,7 +41,26 @@ const api = {
   // Orders
   getOrders: () => request('/orders'),
   getOrder: (id) => request(`/orders/${id}`),
-  getDrivers: () => request('/orders/utils/drivers'),
+  getDrivers: async () => {
+    try {
+      const userData = await request('/auth/users');
+      const userList = Array.isArray(userData?.users) ? userData.users : [];
+      return userList
+        .filter((user) => user.role === 'driver')
+        .map((driver) => ({
+          id: driver.id,
+          name: driver.name,
+          role: driver.role,
+          reputation_score: driver.reputation_score,
+          successful_deliveries: driver.successful_deliveries,
+          disputes_against: driver.disputes_against,
+          disputes_won: driver.disputes_won,
+        }));
+    } catch {
+      const publicDrivers = await request('/auth/drivers');
+      return Array.isArray(publicDrivers) ? publicDrivers : [];
+    }
+  },
   createOrder: (data, requestId) =>
     request('/orders', {
       method: 'POST',

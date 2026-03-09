@@ -13,14 +13,23 @@ export function AuthProvider({ children }) {
 
     const [token, setToken] = useState(() => localStorage.getItem('escrow_token'));
 
-    const login = useCallback(async (username, password) => {
-        const data = await api.login(username, password);
+    const applySession = useCallback((data) => {
         setToken(data.token);
         setUser(data.user);
         localStorage.setItem('escrow_token', data.token);
         localStorage.setItem('escrow_user', JSON.stringify(data.user));
-        return data.user;
     }, []);
+
+    const login = useCallback(async (usernameOrSession, password) => {
+        if (usernameOrSession && typeof usernameOrSession === 'object' && usernameOrSession.token && usernameOrSession.user) {
+            applySession(usernameOrSession);
+            return usernameOrSession.user;
+        }
+
+        const data = await api.login(usernameOrSession, password);
+        applySession(data);
+        return data.user;
+    }, [applySession]);
 
     const logout = useCallback(async () => {
         try { await api.logout(); } catch { }

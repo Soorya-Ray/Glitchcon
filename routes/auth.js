@@ -119,6 +119,24 @@ module.exports = function (db) {
     }
   });
 
+  // Public drivers list
+  router.get('/drivers', async (req, res) => {
+    try {
+      const driversRes = await db.query(`
+        SELECT u.id, u.name, u.role,
+               r.successful_deliveries, r.disputes_against, r.disputes_won, r.score as reputation_score
+        FROM users u
+        LEFT JOIN reputation_scores r ON u.id = r.user_id
+        WHERE u.role = 'driver'
+        ORDER BY r.score DESC NULLS LAST, u.name ASC
+      `);
+
+      res.json({ success: true, data: driversRes.rows });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Get all users (admin only)
   router.get('/users', authenticateToken, requireRole('admin'), async (req, res) => {
     try {

@@ -1,15 +1,17 @@
 import { useState } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { useAuth } from './contexts/AuthContext';
 import { useToast } from './components/Toast';
-import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import Blockchain from './pages/Blockchain';
 import Users from './pages/Users';
+import LandingPage from './pages/LandingPage';
 import Modal from './components/Modal';
 import StripePaymentForm from './components/StripePaymentForm';
+import DriverCard from './components/DriverCard';
 import { formatDate, getBlockIcon } from './components/OrderCard';
 import api from './api';
 
@@ -18,14 +20,19 @@ function makeRequestId() {
   return `req-${Date.now()}-${rand}`;
 }
 
-export default function App() {
-  const { user, isAuthenticated, logout } = useAuth();
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  return children;
+}
+
+function ProtectedApp({ view }) {
+  const { user, logout } = useAuth();
   const toast = useToast();
-  const [currentView, setCurrentView] = useState('dashboard');
+  const navigate = useNavigate();
   const [modal, setModal] = useState(null);
   const [refreshFn, setRefreshFn] = useState(null);
 
-  // Form states for modals
   const [proofForm, setProofForm] = useState({ gpsLat: '28.6139', gpsLng: '77.2090', notes: 'Delivered at front gate. Signed by recipient.' });
   const [disputeReason, setDisputeReason] = useState('');
   const [resolveDecision, setResolveDecision] = useState('RELEASE');
@@ -35,7 +42,6 @@ export default function App() {
   const [selectedDriver, setSelectedDriver] = useState('');
   const [history, setHistory] = useState([]);
   const [currentOrderId, setCurrentOrderId] = useState('');
-  const [currentOrder, setCurrentOrder] = useState(null);
   const [stripePromise, setStripePromise] = useState(null);
   const [paymentFlow, setPaymentFlow] = useState({
     orderId: '',
@@ -45,8 +51,6 @@ export default function App() {
   });
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [newOrderRequestId, setNewOrderRequestId] = useState(makeRequestId());
-
-  if (!isAuthenticated) return <Login />;
 
   async function handleOrderAction(action, orderId, refresh) {
     if (refresh) setRefreshFn(() => refresh);
@@ -88,8 +92,13 @@ export default function App() {
       case 'assign':
         try {
           const driverList = await api.getDrivers();
-          setDrivers(driverList);
-          setSelectedDriver(driverList[0]?.id || '');
+          const sortedDrivers = [...driverList].sort((a, b) => {
+            const aScore = a.reputation_score == null ? -1 : Number(a.reputation_score);
+            const bScore = b.reputation_score == null ? -1 : Number(b.reputation_score);
+            return bScore - aScore;
+          });
+          setDrivers(sortedDrivers);
+          setSelectedDriver(sortedDrivers[0]?.id || '');
           setCurrentOrderId(orderId);
           setModal('assign');
         } catch (err) { toast(err.message, 'error'); }
@@ -138,6 +147,9 @@ export default function App() {
           if (refresh) refresh();
         } catch (err) { toast(err.message, 'error'); }
         break;
+
+      default:
+        break;
     }
   }
 
@@ -184,7 +196,10 @@ export default function App() {
   }
 
   async function submitDispute() {
-    if (!disputeReason.trim()) { toast('Please provide a reason', 'error'); return; }
+    if (!disputeReason.trim()) {
+      toast('Please provide a reason', 'error');
+      return;
+    }
     try {
       await api.raiseDispute(currentOrderId, disputeReason);
       setModal(null);
@@ -196,7 +211,10 @@ export default function App() {
   async function submitResolve() {
     try {
       const amt = resolveDecision === 'PARTIAL' ? resolveAmount : null;
-      if (resolveDecision === 'PARTIAL' && (!amt || amt <= 0)) { toast('Enter a valid amount', 'error'); return; }
+      if (resolveDecision === 'PARTIAL' && (!amt || amt <= 0)) {
+        toast('Enter a valid amount', 'error');
+        return;
+      }
       await api.resolveDispute(currentOrderId, resolveDecision, amt);
       setModal(null);
       toast(`Dispute resolved: ${resolveDecision}`, 'success');
@@ -217,7 +235,7 @@ export default function App() {
   }
 
   function renderView() {
-    switch (currentView) {
+    switch (view) {
       case 'dashboard': return <Dashboard onOrderAction={handleOrderAction} />;
       case 'orders': return <Orders onOrderAction={handleOrderAction} />;
       case 'blockchain': return <Blockchain />;
@@ -227,10 +245,10 @@ export default function App() {
   }
 
   const navItems = [
-    { key: 'dashboard', icon: '📊', label: 'Dashboard' },
-    { key: 'orders', icon: '📦', label: 'Orders' },
-    ...(user?.role === 'admin' ? [{ key: 'users', icon: '👥', label: 'Users' }] : []),
-    { key: 'blockchain', icon: '⛓️', label: 'Blockchain' },
+    { key: 'dashboard', path: '/dashboard', icon: '📊', label: 'Dashboard' },
+    { key: 'orders', path: '/orders', icon: '📦', label: 'Orders' },
+    ...(user?.role === 'admin' ? [{ key: 'users', path: '/users', icon: '👥', label: 'Users' }] : []),
+    { key: 'blockchain', path: '/blockchain', icon: '⛓️', label: 'Blockchain' },
   ];
 
   return (
@@ -249,8 +267,8 @@ export default function App() {
             {navItems.map(item => (
               <button
                 key={item.key}
-                className={`nav-btn ${currentView === item.key ? 'active' : ''}`}
-                onClick={() => setCurrentView(item.key)}
+                className={`nav-btn ${view === item.key ? 'active' : ''}`}
+                onClick={() => navigate(item.path)}
               >
                 {item.icon} {item.label}
               </button>
@@ -274,21 +292,30 @@ export default function App() {
         {renderView()}
       </main>
 
-      {/* Modals */}
       {modal === 'assign' && (
         <Modal title="Assign Driver" onClose={() => setModal(null)} footer={
-          <><button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={submitAssign}>🚚 Assign Driver</button></>
+          <>
+            <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitAssign}>Assign Driver</button>
+          </>
         }>
-          <div className="form-group">
-            <label>Select Driver</label>
-            <select className="form-input" value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)}>
-              {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-          <div style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.15)', borderRadius: '8px', padding: '0.75rem', fontSize: '0.82rem', color: 'var(--accent-cyan)' }}>
-            🚚 The selected driver will be notified and the order will move to IN TRANSIT.
-          </div>
+          {drivers.length === 0 ? (
+            <div className="empty-state" style={{ padding: '1rem 0' }}>
+              <h3>No Drivers Available</h3>
+              <p>Try again in a moment.</p>
+            </div>
+          ) : (
+            <div className="driver-card-list">
+              {drivers.map(driver => (
+                <DriverCard
+                  key={driver.id}
+                  driver={driver}
+                  isSelected={selectedDriver === driver.id}
+                  onSelect={setSelectedDriver}
+                />
+              ))}
+            </div>
+          )}
         </Modal>
       )}
 
@@ -325,8 +352,10 @@ export default function App() {
 
       {modal === 'proof' && (
         <Modal title="Submit Delivery Proof" onClose={() => setModal(null)} footer={
-          <><button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={submitProof}>📸 Submit Proof</button></>
+          <>
+            <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitProof}>📸 Submit Proof</button>
+          </>
         }>
           <div className="form-group">
             <label>GPS Latitude</label>
@@ -349,8 +378,10 @@ export default function App() {
 
       {modal === 'dispute' && (
         <Modal title="Raise Dispute" onClose={() => setModal(null)} footer={
-          <><button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={submitDispute}>⚠️ Raise Dispute</button></>
+          <>
+            <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn btn-danger" onClick={submitDispute}>⚠️ Raise Dispute</button>
+          </>
         }>
           <div className="form-group">
             <label>Reason for Dispute</label>
@@ -364,8 +395,10 @@ export default function App() {
 
       {modal === 'resolve' && (
         <Modal title="Resolve Dispute" onClose={() => setModal(null)} footer={
-          <><button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={submitResolve}>⚖️ Resolve</button></>
+          <>
+            <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitResolve}>⚖️ Resolve</button>
+          </>
         }>
           <div className="form-group">
             <label>Resolution Decision</label>
@@ -404,8 +437,10 @@ export default function App() {
 
       {modal === 'newOrder' && (
         <Modal title="Create New Order" onClose={() => setModal(null)} footer={
-          <><button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={submitNewOrder} disabled={isCreatingOrder}>{isCreatingOrder ? 'Creating...' : '📦 Create Order'}</button></>
+          <>
+            <button className="btn btn-outline" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={submitNewOrder} disabled={isCreatingOrder}>{isCreatingOrder ? 'Creating...' : '📦 Create Order'}</button>
+          </>
         }>
           <div className="form-group">
             <label>Supplier</label>
@@ -433,5 +468,20 @@ export default function App() {
         </Modal>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  const { isAuthenticated } = useAuth();
+
+  return (
+    <Routes>
+      <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+      <Route path="/dashboard" element={<ProtectedRoute><ProtectedApp view="dashboard" /></ProtectedRoute>} />
+      <Route path="/orders" element={<ProtectedRoute><ProtectedApp view="orders" /></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute><ProtectedApp view="users" /></ProtectedRoute>} />
+      <Route path="/blockchain" element={<ProtectedRoute><ProtectedApp view="blockchain" /></ProtectedRoute>} />
+      <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />} />
+    </Routes>
   );
 }

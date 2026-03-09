@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 export default function Modal({ title, children, footer, onClose }) {
     return (
         <div className="modal-overlay" onClick={onClose}>
