@@ -1,59 +1,68 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-
-// Database
+const { validateProductionStack } = require('./config/stack');
 const initDatabase = require('./database/init');
-const db = initDatabase();
-
-// Blockchain
-const BlockchainLedger = require('./blockchain/ledger');
+const db = require('./database/neon');
+const Ledger = require('./blockchain/ledger');
 const EscrowChaincode = require('./blockchain/chaincode');
-const ledger = new BlockchainLedger();
-const chaincode = new EscrowChaincode(ledger);
+const hardhat = require('./blockchain/hardhat');
 
-// Express app
+// Initialize app
 const app = express();
 app.use(cors());
+validateProductionStack();
+app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API Routes
-app.use('/api/auth', require('./routes/auth')(db));
-app.use('/api/orders', require('./routes/orders')(db, chaincode));
-app.use('/api/blockchain', require('./routes/blockchain')(ledger));
+// Initialize local ledger and chaincode
+const ledger = new Ledger();
+const chaincode = new EscrowChaincode(ledger, hardhat);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'running',
-    blockchain: { blocks: ledger.getChain().length, valid: ledger.isChainValid() },
-    database: 'connected',
-    timestamp: new Date().toISOString()
-  });
+// Initialize database
+initDatabase().then(success => {
+  if (success) console.log('✅ Database initialization complete');
+}).catch(err => {
+  console.error('❌ Fatal Database Error:', err);
+  process.exit(1);
 });
 
-// SPA fallback
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Import route modules
+const authRoutes = require('./routes/auth')(db);
+const orderRoutes = require('./routes/orders')(db, chaincode);
+const blockchainRoutes = require('./routes/blockchain')(ledger, hardhat);
+const paymentRoutes = require('./routes/payments')(db, chaincode);
+
+// Mount API routes under /api/v1 prefix for Flutter mobile readiness
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/orders', orderRoutes);
+app.use('/api/v1/blockchain', blockchainRoutes);
+app.use('/api/v1/payments', paymentRoutes);
+
+// Serve React frontend (Production Mode)
+if (process.env.NODE_ENV === 'production' || process.env.SERVE_REACT === 'true') {
+  app.use(express.static(path.join(__dirname, 'client/dist')));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client/dist/index.html'));
+  });
+} else {
+  // In development, Vite proxys to this Express backend.
+  app.get('/', (req, res) => {
+    res.json({ message: 'Escrow API is running. Use frontend proxy or /api/v1 routes.' });
+  });
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ success: false, error: 'Internal Server Error' });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`
-  ╔══════════════════════════════════════════════════════════╗
-  ║   Smart Contract Escrow Payment System                  ║
-  ║   Server running on http://localhost:${PORT}               ║
-  ║                                                         ║
-  ║   Demo Credentials:                                     ║
-  ║   Customer: customer1 / password123                     ║
-  ║   Supplier: supplier1 / password123                     ║
-  ║   Driver:   driver1   / password123                     ║
-  ║   Admin:    admin1    / password123                     ║
-  ╚══════════════════════════════════════════════════════════╝
-  `);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📱 API ready for Flutter consumption at /api/v1`);
 });

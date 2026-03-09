@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
+const { requireEnv } = require('../config/stack');
 
-const JWT_SECRET = 'escrow-system-secret-key-2024';
+const JWT_SECRET = process.env.NODE_ENV === 'test'
+  ? 'test-jwt-secret'
+  : requireEnv('JWT_SECRET');
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];

@@ -3,3 +3,6 @@ data/
 uploads/
 *.db
 .env
+hardhat/cache/
+hardhat/artifacts/
+hardhat/deployment.local.json

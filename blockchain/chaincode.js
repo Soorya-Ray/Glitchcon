@@ -1,17 +1,21 @@
 class EscrowChaincode {
-  constructor(ledger) {
+  constructor(ledger, blockchainService) {
     this.ledger = ledger;
+    this.blockchainService = blockchainService;
     this.worldState = new Map(); // orderId -> order state
+    this.strictBlockchain = process.env.NODE_ENV === 'test'
+      ? false
+      : process.env.REQUIRE_BLOCKCHAIN_TX !== 'false';
   }
 
   // Valid state transitions
   static TRANSITIONS = {
-    CREATED:          ['LOCKED'],
-    LOCKED:           ['IN_TRANSIT'],
-    IN_TRANSIT:       ['PROOF_SUBMITTED'],
-    PROOF_SUBMITTED:  ['CONFIRMED', 'DISPUTED'],
-    CONFIRMED:        ['SETTLED'],
-    DISPUTED:         ['RESOLVED'],
+    CREATED: ['LOCKED'],
+    LOCKED: ['IN_TRANSIT'],
+    IN_TRANSIT: ['PROOF_SUBMITTED'],
+    PROOF_SUBMITTED: ['CONFIRMED', 'DISPUTED'],
+    CONFIRMED: ['SETTLED'],
+    DISPUTED: ['RESOLVED'],
   };
 
   _validateTransition(currentStatus, newStatus) {
@@ -27,24 +31,48 @@ class EscrowChaincode {
     return order;
   }
 
-  _updateState(orderId, updates, txType) {
+  async _recordOnChainTx(orderId, status) {
+    if (!this.blockchainService || typeof this.blockchainService.recordTransaction !== 'function') {
+      if (this.strictBlockchain) {
+        throw new Error('Blockchain service not available');
+      }
+      return null;
+    }
+
+    try {
+      return await this.blockchainService.recordTransaction(orderId, status);
+    } catch (err) {
+      if (this.strictBlockchain) {
+        throw new Error(`Blockchain TX failed for ${orderId} (${status}): ${err.message}`);
+      }
+      console.error(`Skipping blockchain TX for ${orderId}: ${err.message}`);
+      return null;
+    }
+  }
+
+  async _updateState(orderId, updates, txType) {
     const order = this.worldState.get(orderId) || {};
     const updated = { ...order, ...updates, updatedAt: new Date().toISOString() };
+
+    // Write to external EVM node (Hardhat by default)
+    updated.onChainTxHash = await this._recordOnChainTx(orderId, updated.status);
+
     this.worldState.set(orderId, updated);
 
-    // Record on ledger
+    // Record on local ledger
     const block = this.ledger.addBlock({
       type: txType,
       orderId,
       status: updated.status,
       details: updates,
+      onChainTxHash: updated.onChainTxHash,
       timestamp: updated.updatedAt
     });
 
     return { order: updated, block };
   }
 
-  createOrder({ orderId, customerId, supplierId, amount, description, pickup, delivery }) {
+  async createOrder({ orderId, customerId, supplierId, amount, description, pickup, delivery }) {
     if (this.worldState.has(orderId)) {
       throw new Error(`Order ${orderId} already exists`);
     }
@@ -63,9 +91,13 @@ class EscrowChaincode {
       deliveryProof: null,
       disputeReason: null,
       resolution: null,
+      onChainTxHash: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
+    // Write to external EVM node (Hardhat by default)
+    order.onChainTxHash = await this._recordOnChainTx(orderId, order.status);
 
     this.worldState.set(orderId, order);
 
@@ -74,13 +106,40 @@ class EscrowChaincode {
       orderId,
       status: 'CREATED',
       details: { customerId, supplierId, amount, description, pickup, delivery },
+      onChainTxHash: order.onChainTxHash,
       timestamp: order.createdAt
     });
 
     return { order, block };
   }
 
-  lockPayment(orderId, paymentRef) {
+  deleteOrder(orderId, customerId) {
+    const order = this._getOrder(orderId);
+    if (order.customerId !== customerId) {
+      throw new Error('Only the order customer can delete this order');
+    }
+    if (order.status !== 'CREATED') {
+      throw new Error(`Only CREATED orders can be deleted. Current status: ${order.status}`);
+    }
+
+    this.worldState.delete(orderId);
+
+    const block = this.ledger.addBlock({
+      type: 'ORDER_DELETED',
+      orderId,
+      status: 'DELETED',
+      details: {
+        deletedBy: customerId,
+        previousStatus: order.status
+      },
+      onChainTxHash: null,
+      timestamp: new Date().toISOString()
+    });
+
+    return { deleted: true, orderId, block };
+  }
+
+  async lockPayment(orderId, paymentRef) {
     const order = this._getOrder(orderId);
     this._validateTransition(order.status, 'LOCKED');
 
@@ -90,7 +149,7 @@ class EscrowChaincode {
     }, 'PAYMENT_LOCKED');
   }
 
-  assignDriver(orderId, driverId) {
+  async assignDriver(orderId, driverId) {
     const order = this._getOrder(orderId);
     this._validateTransition(order.status, 'IN_TRANSIT');
 
@@ -100,7 +159,7 @@ class EscrowChaincode {
     }, 'DRIVER_ASSIGNED');
   }
 
-  submitDeliveryProof(orderId, proofData) {
+  async submitDeliveryProof(orderId, proofData) {
     const order = this._getOrder(orderId);
     this._validateTransition(order.status, 'PROOF_SUBMITTED');
 
@@ -119,23 +178,23 @@ class EscrowChaincode {
     }, 'PROOF_SUBMITTED');
   }
 
-  confirmDelivery(orderId, customerId) {
+  async confirmDelivery(orderId, customerId) {
     const order = this._getOrder(orderId);
     if (order.customerId !== customerId) {
       throw new Error('Only the order customer can confirm delivery');
     }
     this._validateTransition(order.status, 'CONFIRMED');
 
-    const result = this._updateState(orderId, {
+    await this._updateState(orderId, {
       status: 'CONFIRMED'
     }, 'DELIVERY_CONFIRMED');
 
     // Auto-trigger payment release
-    const releaseResult = this.releasePayment(orderId);
+    const releaseResult = await this.releasePayment(orderId);
     return releaseResult;
   }
 
-  releasePayment(orderId) {
+  async releasePayment(orderId) {
     const order = this._getOrder(orderId);
     this._validateTransition(order.status, 'SETTLED');
 
@@ -145,7 +204,7 @@ class EscrowChaincode {
     }, 'PAYMENT_RELEASED');
   }
 
-  raiseDispute(orderId, reason) {
+  async raiseDispute(orderId, reason) {
     const order = this._getOrder(orderId);
     this._validateTransition(order.status, 'DISPUTED');
 
@@ -156,7 +215,7 @@ class EscrowChaincode {
     }, 'DISPUTE_RAISED');
   }
 
-  resolveDispute(orderId, decision, amount = null) {
+  async resolveDispute(orderId, decision, amount = null) {
     const order = this._getOrder(orderId);
     this._validateTransition(order.status, 'RESOLVED');
 

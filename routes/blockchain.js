@@ -1,48 +1,70 @@
 const express = require('express');
-const { authenticateToken } = require('../middleware/auth');
 
-module.exports = function(ledger) {
+module.exports = function (ledger, blockchainService) {
   const router = express.Router();
 
-  // Get full blockchain ledger
-  router.get('/chain', authenticateToken, (req, res) => {
-    const chain = ledger.getChain();
+  // Get full chain (local)
+  router.get('/chain', (req, res) => {
     res.json({
-      length: chain.length,
-      chain,
-      valid: ledger.isChainValid()
-    });
-  });
-
-  // Validate chain integrity
-  router.get('/validate', authenticateToken, (req, res) => {
-    const valid = ledger.isChainValid();
-    const chain = ledger.getChain();
-    res.json({
-      valid,
-      blockCount: chain.length,
-      latestBlock: chain[chain.length - 1],
-      message: valid ? '✅ Blockchain integrity verified — all hashes valid' : '❌ Blockchain integrity compromised!'
-    });
-  });
-
-  // Get stats
-  router.get('/stats', authenticateToken, (req, res) => {
-    const chain = ledger.getChain();
-    const txTypes = {};
-    chain.forEach(b => {
-      if (b.data && b.data.type) {
-        txTypes[b.data.type] = (txTypes[b.data.type] || 0) + 1;
+      success: true,
+      data: {
+        chain: ledger.getChain(),
+        length: ledger.getChain().length
       }
     });
+  });
 
+  // Validate chain integrity (local)
+  router.get('/validate', (req, res) => {
+    const isValid = ledger.isChainValid();
     res.json({
-      totalBlocks: chain.length,
-      genesisTimestamp: chain[0].timestamp,
-      latestTimestamp: chain[chain.length - 1].timestamp,
-      transactionTypes: txTypes,
-      chainValid: ledger.isChainValid()
+      success: true,
+      data: {
+        valid: isValid,
+        message: isValid ? 'Blockchain is valid and immutable.' : 'Blockchain integrity compromised!'
+      }
     });
+  });
+
+  // Verify a single blockchain transaction
+  async function verifyTx(req, res) {
+    try {
+      const receipt = await blockchainService.verifyTransaction(req.params.txHash);
+      if (!receipt) {
+        return res.status(404).json({ success: false, error: 'Transaction not found or unconfirmed' });
+      }
+      res.json({
+        success: true,
+        data: {
+          verified: true,
+          status: receipt.status === 1 ? 'SUCCESS' : 'FAILURE',
+          blockNumber: receipt.blockNumber,
+          confirmations: receipt.confirmations
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  router.get('/tx/:txHash', verifyTx);
+
+  // Get blockchain statistics
+  router.get('/stats', (req, res) => {
+    const chain = ledger.getChain();
+    const stats = {
+      totalBlocks: chain.length,
+      latestTimestamp: chain[chain.length - 1].timestamp,
+      chainValid: ledger.isChainValid(),
+      transactionTypes: {}
+    };
+
+    chain.forEach(block => {
+      const type = block.data.type;
+      stats.transactionTypes[type] = (stats.transactionTypes[type] || 0) + 1;
+    });
+
+    res.json({ success: true, data: stats });
   });
 
   return router;
